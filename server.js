@@ -1,4 +1,12 @@
 const express = require('express');
+
+require('dotenv').config();
+const { OpenAI } = require('openai');
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
@@ -114,6 +122,75 @@ app.post('/api/read-image', async (req, res) => {
     }
 });
 
+
+// ==========================================
+// V8 GENERATOR SLIKA - DALL-E 3 INTEGRACIJA
+// ==========================================
+app.post('/api/generisi-sliku', async (req, res) => {
+  const { prompt, size } = req.body;
+
+  if (!prompt) {
+    return res.status(400).json({ error: 'Prompt je obavezan da bi mašina radila.' });
+  }
+
+  try {
+    console.log(`\n[V8 MOTOR] Pokrećem DALL-E 3... Učitavam ideju: "${prompt}"`);
+    
+    const response = await openai.images.generate({
+      model: "dall-e-3", // Koristimo najmoćniji model
+      prompt: prompt,
+      n: 1, 
+      size: size || "1024x1024", 
+      quality: "standard", 
+      response_format: "url", 
+    });
+
+    const imageUrl = response.data[0].url;
+    console.log("[V8 MOTOR] Slika je uspešno iskovana i spremna za klijenta!");
+    
+    // Šaljemo sliku nazad tvom React frontendu
+    res.json({ imageUrl });
+
+  } catch (error) {
+    console.error("[V8 MOTOR ERROR] Kvar na mašini:", error);
+    res.status(500).json({ error: 'Došlo je do greške prilikom komuniciranja sa OpenAI serverom.' });
+  }
+});
+// ==========================================
+// V8 BLINDIRANI SISTEM ZA PREUZIMANJE SLIKA
+// ==========================================
+app.get('/api/download-sliku', async (req, res) => {
+  const imageUrl = req.query.url; // React šalje URL slike ovde
+
+  if (!imageUrl) {
+    return res.status(400).send('Nema URL-a slike.');
+  }
+
+  try {
+    console.log(`[V8 MOTOR] Preuzimam sliku sa OpenAI servera radi direktnog slanja...`);
+    
+    // 1. Backend skida sliku kao "stream" (tok podataka)
+    const response = await axios({
+      url: imageUrl,
+      method: 'GET',
+      responseType: 'stream'
+    });
+
+    // 2. Postavljamo blindirane zaglavlja (Headers) da primoramo pretraživač da skine fajl
+    const imeFajla = `V8-Remek-Delo-${Date.now()}.png`;
+    res.setHeader('Content-Disposition', `attachment; filename="${imeFajla}"`);
+    res.setHeader('Content-Type', 'image/png');
+
+    // 3. Spajamo (pipe) dolazni tok podataka direktno u odlazni odgovor klijentu
+    response.data.pipe(res);
+    console.log(`[V8 MOTOR] Slika uspešno poslata direktno na klijentov računar!`);
+
+  } catch (error) {
+    console.error("[V8 MOTOR GREŠKA] Kvar na sistemu za preuzimanje:", error);
+    res.status(500).send('Greška prilikom preuzimanja slike.');
+  }
+});
+// ==========================================
 // =========================================================
 // POKRETANJE SERVERA
 // =========================================================
