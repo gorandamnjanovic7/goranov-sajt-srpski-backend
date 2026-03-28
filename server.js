@@ -7,7 +7,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors()); 
-app.use(express.json());
+// V8 dodatak: limit na 50mb u slučaju da prolaze teške Base64 slike
+app.use(express.json({ limit: '50mb' })); 
 
 // POČETAK FUNKCIJE: pozoviImagenAPI
 const pozoviImagenAPI = async (promptTekst) => {
@@ -27,6 +28,7 @@ const pozoviImagenAPI = async (promptTekst) => {
     n: 1, 
     response_format: "b64_json" 
   };
+  
   const response = await fetch(url, {
     method: "POST",
     headers: { 
@@ -61,13 +63,13 @@ const generisiPixarHandler = async (req, res) => {
   try {
     const primljeniPrompt = req.body.prompt;
     
-    console.log("🔥 V8 Sistem: Zahtev za renderovanje primljen.");
+    console.log("🔥 V8 Sistem: Zahtev za Pixar renderovanje primljen.");
     console.log("Inicijalizujem Imagen 3 (OpenAI kompatibilni mod)...");
 
     // Pozivamo funkciju koja komunicira sa Google-om
     const generisanaSlikaUrl = await pozoviImagenAPI(primljeniPrompt);
 
-    console.log("✅ Imagen 3.0 je uspešno završio renderovanje!");
+    console.log("✅ Imagen 3.0 je uspešno završio Pixar renderovanje!");
     
     // Šaljemo pravu sliku nazad ka React-u
     res.json({ imageUrl: generisanaSlikaUrl });
@@ -79,8 +81,38 @@ const generisiPixarHandler = async (req, res) => {
 };
 // KRAJ FUNKCIJE: generisiPixarHandler
 
-// Definicija rute
+
+// POČETAK FUNKCIJE: generisiSlikuHandler (NOVA FUNKCIJA ZA V8 KREATOR SLIKA)
+const generisiSlikuHandler = async (req, res) => {
+  try {
+    const primljeniPrompt = req.body.prompt;
+    const ar = req.body.aspectRatio; // Ako kasnije budes hteo da menjas odnos stranica preko API-ja
+    
+    console.log(`🔥 V8 Sistem: Zahtev za Kreator Slika primljen (AR: ${ar}).`);
+    console.log("Inicijalizujem renderovanje bazične slike...");
+
+    const generisanaSlikaUrl = await pozoviImagenAPI(primljeniPrompt);
+
+    console.log("✅ V8 Kreator Slika je uspešno završio zadatak!");
+    
+    res.json({ imageUrl: generisanaSlikaUrl });
+
+  } catch (error) {
+    console.error("V8 Sistemska Greška:", error.message);
+    res.status(500).json({ error: "Greška na serveru prilikom generisanja slike." });
+  }
+};
+// KRAJ FUNKCIJE: generisiSlikuHandler
+
+
+// Definicija ruta (SADA IMAMO OBE VRATE OTVORENE!)
 app.post('/api/generisi-pixar', generisiPixarHandler);
+app.post('/api/generisi-sliku', generisiSlikuHandler); 
+
+// V8 ZAŠTITA ZA PREUZIMANJE: Da ne baci 404 kada React pokuša da skine base64 fajl
+app.get('/api/download-sliku', (req, res) => {
+  res.status(200).json({ status: "V8 Download ruta je aktivna." });
+});
 
 // POČETAK FUNKCIJE: pokreniServer
 const pokreniServer = () => {
