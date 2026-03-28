@@ -1,4 +1,3 @@
-// Backend Source Code Link: backend/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -6,12 +5,10 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// V8 KONFIGURACIJA: Dozvoljavamo velike Base64 slike (do 50MB) i otvaramo vrata klijentima
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// --- V8 PRODAVNICA PODACI (Rešava 404 /api/products) ---
-// Ovde definišeš šta se sve prodaje na tvojoj V8 platformi
+// POČETAK FUNKCIJE: proizvodiPodaci
 const mojiProizvodi = [
   {
     id: 1,
@@ -25,20 +22,16 @@ const mojiProizvodi = [
     id: 2,
     naziv: "V8 Pixar Selfie",
     cena: "350 RSD",
-    opis: "Pretvorite se u omiljenog filmskog ili serijskog junaka uz vrhunsku AI simulaciju.",
+    opis: "Pretvorite se u omiljenog filmskog junaka uz vrhunsku AI simulaciju.",
     ikonica: "Camera",
     link: "/v8-pixar-selfie"
   }
 ];
+// KRAJ FUNKCIJE: proizvodiPodaci
 
 // POČETAK FUNKCIJE: pozoviImagenAPI
-// Glavni V8 motor koji priča sa Google Imagen 3.0 preko OpenAI rute
 const pozoviImagenAPI = async (promptTekst) => {
   const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
-    throw new Error("Nedostaje GOOGLE_API_KEY u .env fajlu. Proveri konfiguraciju V8 servera.");
-  }
-
   const url = `https://generativelanguage.googleapis.com/v1beta/openai/images/generations`;
 
   const body = {
@@ -57,76 +50,109 @@ const pozoviImagenAPI = async (promptTekst) => {
     body: JSON.stringify(body)
   });
 
-  if (!response.ok) {
-    const errorData = await response.text();
-    throw new Error(`Google API Greška: ${response.status} - ${errorData}`);
-  }
-
   const data = await response.json();
-  
-  if (!data.data || !data.data[0] || !data.data[0].b64_json) {
-      console.error("🚨 V8 Safety Blokada (Google odbio prompt):", JSON.stringify(data, null, 2));
-      throw new Error("Google API nije odobrio ovaj prompt. Pokušajte sa drugim opisom.");
+  if (!response.ok || !data.data) {
+      throw new Error("Google API Safety Blokada ili greška.");
   }
 
-  const base64Image = data.data[0].b64_json;
-  return `data:image/jpeg;base64,${base64Image}`;
+  return `data:image/jpeg;base64,${data.data[0].b64_json}`;
 };
 // KRAJ FUNKCIJE: pozoviImagenAPI
 
-
-// --- RUTE ZA FRONTEND ---
-
-// RUTA: Lista Proizvoda (Popravlja 404 grešku na sajtu)
-app.get('/api/products', (req, res) => {
-  console.log("📦 V8 Katalog: Šaljem listu proizvoda klijentu.");
-  res.json(mojiProizvodi);
-});
-
-// RUTA: Pixar Selfie Generator
-app.post('/api/generisi-pixar', async (req, res) => {
+// POČETAK FUNKCIJE: analizirajSlikuV8
+const analizirajSlikuV8 = async (req, res) => {
   try {
-    const { prompt } = req.body;
-    console.log("🎬 V8 Pixar: Zahtev za filmski render primljen.");
-    const slikaUrl = await pozoviImagenAPI(prompt);
-    console.log("✅ V8 Pixar: Renderovanje uspešno!");
-    res.json({ imageUrl: slikaUrl });
+    const { imageUrl, prompt } = req.body;
+    console.log("🔥 V8 Sistem: Primljena slika za analizu:", imageUrl);
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: "Nema slike za analizu!" });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+        console.error("❌ Greška: OPENAI_API_KEY nije pronađen u .env fajlu!");
+        return res.status(500).json({ error: "API ključ nije konfigurisan na serveru." });
+    }
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o", 
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: imageUrl } }
+            ]
+          }
+        ],
+        max_tokens: 800
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+        console.error("❌ OpenAI Greška:", data.error);
+        return res.status(500).json({ error: data.error.message });
+    }
+
+    const gptAnaliza = data.choices[0].message.content;
+    console.log("✅ V8 Analiza uspešna! Šaljem nazad na sajt...");
+    
+    res.json({ result: gptAnaliza });
+
   } catch (error) {
-    console.error("V8 Pixar Greška:", error.message);
+    console.error("❌ [V8 MOTOR GREŠKA] Analiza slike pukla:", error);
     res.status(500).json({ error: error.message });
   }
-});
+};
+// KRAJ FUNKCIJE: analizirajSlikuV8
 
-// RUTA: Glavni Kreator Slika
+
+// --- RUTE ---
+
+// POČETAK FUNKCIJE: dohvatiProizvodeRuta
+app.get('/api/products', (req, res) => {
+  res.json(mojiProizvodi);
+});
+// KRAJ FUNKCIJE: dohvatiProizvodeRuta
+
+// POČETAK FUNKCIJE: generisiSlikuRuta
 app.post('/api/generisi-sliku', async (req, res) => {
   try {
     const { prompt } = req.body;
-    console.log("🎨 V8 Kreator: Zahtev za generisanje slike primljen.");
     const slikaUrl = await pozoviImagenAPI(prompt);
-    console.log("✅ V8 Kreator: Slika isporučena!");
     res.json({ imageUrl: slikaUrl });
   } catch (error) {
-    console.error("V8 Kreator Greška:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
+// KRAJ FUNKCIJE: generisiSlikuRuta
 
-// RUTA: Download Zaštita (Da ne baca 404 iako skidamo direktno u Reactu)
-app.get('/api/download-sliku', (req, res) => {
-  res.status(200).send("V8 Download tunel je otvoren.");
+// POČETAK FUNKCIJE: generisiPixarRuta
+app.post('/api/generisi-pixar', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    const slikaUrl = await pozoviImagenAPI(prompt);
+    res.json({ imageUrl: slikaUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
+// KRAJ FUNKCIJE: generisiPixarRuta
 
-// --- POKRETANJE V8 MAŠINE ---
-const pokreniServer = () => {
-  console.log(`
-  🏁🏁🏁 V8 BACKEND JE UPALJEN 🏁🏁🏁
-  🚀 Port: ${PORT}
-  🛠️ Google Imagen 3: Povezan
-  📦 Products Ruta: Aktivna
-  🛡️ Admin Mod: Spreman
-  ---------------------------------------
-  🏎️ Puni gas na: https://ai-alati.rs
-  `);
-};
+// POČETAK FUNKCIJE: analizirajSlikuRuta
+app.post('/api/read-image', analizirajSlikuV8);
+// KRAJ FUNKCIJE: analizirajSlikuRuta
 
-app.listen(PORT, pokreniServer);
+// POČETAK FUNKCIJE: pokreniServer
+app.listen(PORT, () => {
+  console.log(`🏁 V8 Lokalni Server je upaljen na portu ${PORT}`);
+});
+// KRAJ FUNKCIJE: pokreniServer
