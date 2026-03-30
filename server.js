@@ -202,6 +202,40 @@ app.post('/api/generisi-pixar', async (req, res) => {
 
 app.post('/api/read-image', analizirajSlikuV8);
 
+// ==========================================
+// 🚀 V8 RUTA: ČUVANJE NOVOG PROIZVODA (POST)
+// ==========================================
+app.post('/api/products', (req, res) => {
+  try {
+    const noviProizvod = req.body;
+    
+    // Generišemo ID ako ga frontend nije poslao
+    if (!noviProizvod.id) {
+      noviProizvod.id = Date.now().toString(); 
+    }
+
+    // Ubacujemo u tvoj niz na serveru (mojiProizvodi)
+    mojiProizvodi.push(noviProizvod);
+
+    console.log("🔥 V8 Motor: Uspešno sačuvan proizvod ->", noviProizvod.title || noviProizvod.id);
+
+    // Šaljemo React-u potvrdu da je sve prošlo glatko
+    res.status(201).json({ 
+      success: true, 
+      message: "Proizvod je V8 blindiran i sačuvan!", 
+      product: noviProizvod 
+    });
+
+  } catch (error) {
+    console.error("❌ V8 Greška pri čuvanju proizvoda:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`=========================================`);
   console.log(`🏁 V8 Lokalni Server grmi na portu ${PORT}`);
