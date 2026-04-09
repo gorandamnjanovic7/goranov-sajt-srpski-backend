@@ -74,7 +74,7 @@ const getPixarVisualSpecs = async (fullPrompt) => {
     Your ONLY job is to describe how this EXACT actor would look in an extremely detailed, hyper-realistic CGI format that preserves their unique facial identity 100%. DO NOT describe them as a stylized or "cartoonish" character!
     Focus strictly on:
     - DETAILED FACIAL GEOMETRY: Describe the specific bone structure, jawline, nose shape, and mouth shape of the actor with forensic precision.
-    - SKIN TEXTURE & DETAIL: Describe intricate skin details, pores, subtle wrinkles, sun-weathered texture, stubble, combat scars, dirt, and facial imperfections. (Example for Russell Crowe: "deep-set hazel eyes with intense focus, distinct nose bridge, sun-weathered skin with stubble and minor scars").
+    - SKIN TEXTURE & DETAIL: Describe intricate skin details, pores, subtle wrinkles, sun-weathered texture, stubble, combat scars, dirt, and facial imperfections.
     - SIGNATURE EXPRESSION: Capture the exact intense gaze, scowl, or look the actor is famous for in that movie.
     - DETAILED CLOTHING: Describe their exact iconic outfit with detailed, textured materials.
     
@@ -120,6 +120,46 @@ const pozoviImagenAPI = async (promptTekst) => {
   return data.data[0].b64_json;
 };
 // --- KRAJ: V8 RUKA - IMAGEN API KANAL ---
+
+// =================================================================
+// 🎨 POČETAK: V8 RUKA - OPENAI IMAGE API KANAL (DALL-E 3 SA RADAROM)
+// =================================================================
+const pozoviOpenAIImageAPI = async (promptTekst) => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const url = `https://api.openai.com/v1/images/generations`;
+
+  console.log("⏳ V8 radar: Kucam na vrata OpenAI servera...");
+
+  const body = {
+    model: "dall-e-3", // Najstabilniji i najmoćniji model
+    prompt: promptTekst,
+    n: 1,
+    size: "1024x1024",
+    quality: "standard" // DALL-E 3 najbolje radi sa 'standard'
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  console.log("📩 V8 radar: Odgovor od OpenAI stigao! Status kod:", response.status);
+
+  const data = await response.json();
+  
+  if (!response.ok || !data.data) {
+    console.error("❌ OpenAI Detaljna Greška:", data);
+    throw new Error(data.error?.message || "OpenAI API Blokada.");
+  }
+
+  console.log("✅ V8 radar: Slika uspešno pročitana, šaljem na sajt!");
+  return data.data[0].url; 
+};
+// --- KRAJ: V8 RUKA - OPENAI IMAGE API KANAL ---
 
 // =================================================================
 // 👁️ POČETAK: V8 VISION - OPENAI GPT-4o ANALIZA SLIKE
@@ -206,7 +246,61 @@ app.post('/api/generisi-pixar', async (req, res) => {
   }
 });
 
+// --- NOVA V8 TURBO RUTA ---
+app.post('/api/generisi-sliku-openai', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    console.log(`\n🏎️💨 V8 OPENAI TURBO START...`);
+    
+    let finalV8Prompt = prompt;
+    try {
+      const actorDetails = await getVisualSpecs(prompt);
+      if (actorDetails) {
+        finalV8Prompt = `Hyper-realistic 8k photo, V8 style. Subject: ${prompt}. Details: ${actorDetails}`;
+      }
+    } catch (e) {
+      console.log("⚠️ Forenzika preskočena.");
+    }
+
+    console.log(`🛡️ V8 ŠALJE NA OPENAI CRTANJE...`);
+    const imageUrl = await pozoviOpenAIImageAPI(finalV8Prompt);
+    res.json({ imageUrl: imageUrl }); 
+  } catch (error) {
+    console.error("❌ V8 OPENAI GREŠKA:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/read-image', analizirajSlikuV8);
+
+// ==========================================
+// 📥 POČETAK: V8 RUTA ZA DIREKTAN DOWNLOAD (PROXY)
+// ==========================================
+app.post('/api/download-image', async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+    if (!imageUrl) return res.status(400).json({ error: "Nema URL-a slike." });
+
+    console.log("📥 V8 Motor skida sliku sa OpenAI servera za klijenta...");
+
+    // Backend skida sliku (Bekennd nema CORS blokade!)
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error("Ne mogu da dovučem sliku sa OpenAI servera.");
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Postavljamo headere koji FORSIRAJU da pretraživač preuzme fajl u Download folder
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Content-Disposition', `attachment; filename="V8_Premium_Turbo_${Date.now()}.jpg"`);
+
+    res.send(buffer);
+  } catch (error) {
+    console.error("❌ V8 Download Greška:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+// --- KRAJ: V8 RUTA ZA DIREKTAN DOWNLOAD ---
 // --- KRAJ: RUTE ZA PROIZVODE I GENERISANJE SLIKA ---
 
 // ==========================================
@@ -252,7 +346,6 @@ app.post('/api/openai-alati', async (req, res) => {
 
     console.log(`\n🏎️💨 V8 POKREĆE ALAT: [${alatId}] ZA UNOS: "${unos}"`);
 
-    // V8 Prompt Inženjering: Dajemo AI-u specifičan mozak zavisno od alata koji je kliknut
     let sistemskiPrompt = "Ti si surovi prodajni ekspert. Pišeš kratko, jasno, bez generičnih floskula, direktno u metu na srpskom jeziku.";
     
     switch(alatId) {
